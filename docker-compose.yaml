@@ -1,7 +1,7 @@
 version: '3'
 services:
-  ws_golang_client:
-    build:
+  data_stream:
+    build:s
       context: ./go-backend
     environment:
       - APP_ENV=dev
