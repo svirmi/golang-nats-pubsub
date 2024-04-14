@@ -1,0 +1,9 @@
+version: '3'
+services:
+  ws_golang_client:
+    build:
+      context: ./go-backend
+    environment:
+      - APP_ENV=dev
+    volumes:
+      - ./go-backend:/app 
