@@ -63,7 +63,5 @@ loop:
 		case <-closer: // Exit loop and stop sending/generation
 			break loop
 		}
-
 	}
-
 }
