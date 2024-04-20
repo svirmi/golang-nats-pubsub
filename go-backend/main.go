@@ -21,6 +21,7 @@ func main() {
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
 	defer func() {
+		fmt.Println("program finished")
 		close(interrupt)
 	}()
 
@@ -30,7 +31,7 @@ func main() {
 
 	randStream := repeatFunc(interrupt, randNumFetcher)
 
-	CPUCount := runtime.NumCPU() * 1 // coefficient to play with, get faster calculation when set to 2 or even 4
+	CPUCount := runtime.NumCPU() * 2 // coefficient to play with, get faster calculation when set to 2 or even 4
 
 	// slice of resulting channels limited by logical CPU number available
 	primeFinderChannels := make([]<-chan int, CPUCount)
@@ -43,11 +44,11 @@ func main() {
 	// fanning in
 	fannedInStream := fanIn(interrupt, primeFinderChannels...)
 
-	for randPrime := range take(interrupt, fannedInStream, 10) {
+	for randPrime := range take(interrupt, fannedInStream, 15) {
 		fmt.Println(randPrime)
 	}
 
-	fmt.Println("\nProgram finished")
+	fmt.Println("ready to finish")
 }
 
 func repeatFunc[T any, K any](done <-chan K, fn func() T) <-chan T {
