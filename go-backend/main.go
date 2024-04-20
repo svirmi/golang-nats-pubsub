@@ -27,8 +27,9 @@ func main() {
 	}
 
 	randStream := repeatFunc(interrupt, randNumFetcher)
+	primeStream := primeFinder(interrupt, randStream)
 
-	for rando := range take(interrupt, randStream, 10) {
+	for rando := range take(interrupt, primeStream, 10) {
 		fmt.Println(rando)
 	}
 
@@ -72,4 +73,36 @@ func take[T any](done <-chan os.Signal, stream <-chan T, n int) <-chan T {
 	}()
 
 	return taken
+}
+
+func primeFinder(done <-chan os.Signal, randStream <-chan int) <-chan int {
+	// NB! very costly slow function
+	isPrime := func(randomInt int) bool {
+		for i := randomInt - 1; i > 1; i-- {
+			if randomInt%i == 0 {
+				return false
+			}
+		}
+		return true
+	}
+
+	primes := make(chan int)
+
+	go func() {
+
+		defer close(primes)
+
+		for {
+			select {
+			case <-done:
+				return
+			case randomInt := <-randStream:
+				if isPrime(randomInt) {
+					primes <- randomInt
+				}
+			}
+		}
+	}()
+
+	return primes
 }
