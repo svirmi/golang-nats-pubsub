@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"runtime"
+	"sync"
 	"syscall"
 )
 
@@ -23,13 +25,25 @@ func main() {
 	}()
 
 	randNumFetcher := func() int {
-		return rand.Intn(500000000)
+		return rand.Intn(50000000)
 	}
 
 	randStream := repeatFunc(interrupt, randNumFetcher)
-	primeStream := primeFinder(interrupt, randStream)
 
-	for rando := range take(interrupt, primeStream, 10) {
+	CPUCount := runtime.NumCPU() * 1 // coefficient to play with, get faster calculation when set to 2 or even 4
+
+	// slice of resulting channels limited by logical CPU number available
+	primeFinderChannels := make([]<-chan int, CPUCount)
+
+	// fanning out
+	for core := 0; core < CPUCount; core++ {
+		primeFinderChannels[core] = primeFinder(interrupt, randStream)
+	}
+
+	// fanning in
+	fannedInStream := fanIn(interrupt, primeFinderChannels...)
+
+	for rando := range take(interrupt, fannedInStream, 10) {
 		fmt.Println(rando)
 	}
 
@@ -52,6 +66,33 @@ func repeatFunc[T any, K any](done <-chan K, fn func() T) <-chan T {
 	}()
 
 	return stream
+}
+
+func fanIn[T any](done <-chan os.Signal, channels ...<-chan T) <-chan T {
+	var wg sync.WaitGroup
+	fannedInStream := make(chan T)
+
+	transfer := func(c <-chan T) {
+		defer wg.Done()
+		for i := range c {
+			select {
+			case <-done:
+				return
+			case fannedInStream <- i:
+			}
+		}
+	}
+	for _, c := range channels {
+		wg.Add(1)
+		go transfer(c)
+	}
+
+	go func() {
+		wg.Wait()
+		close(fannedInStream)
+	}()
+
+	return fannedInStream
 }
 
 func take[T any](done <-chan os.Signal, stream <-chan T, n int) <-chan T {
