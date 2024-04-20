@@ -43,8 +43,8 @@ func main() {
 	// fanning in
 	fannedInStream := fanIn(interrupt, primeFinderChannels...)
 
-	for rando := range take(interrupt, fannedInStream, 10) {
-		fmt.Println(rando)
+	for randPrime := range take(interrupt, fannedInStream, 10) {
+		fmt.Println(randPrime)
 	}
 
 	fmt.Println("\nProgram finished")
@@ -130,9 +130,7 @@ func primeFinder(done <-chan os.Signal, randStream <-chan int) <-chan int {
 	primes := make(chan int)
 
 	go func() {
-
 		defer close(primes)
-
 		for {
 			select {
 			case <-done:
