@@ -26,7 +26,9 @@ func main() {
 		return rand.Intn(500000000)
 	}
 
-	for rando := range take(interrupt, repeatFunc(interrupt, randNumFetcher), 10) {
+	randStream := repeatFunc(interrupt, randNumFetcher)
+
+	for rando := range take(interrupt, randStream, 10) {
 		fmt.Println(rando)
 	}
 
@@ -52,6 +54,10 @@ func repeatFunc[T any, K any](done <-chan K, fn func() T) <-chan T {
 }
 
 func take[T any](done <-chan os.Signal, stream <-chan T, n int) <-chan T {
+
+	// Send operation to unbuffered channel blocks the sending goroutine,
+	// 'stream' (see repeatFunc, it stops) in this case blocked until data is read by 'taken' channel
+
 	taken := make(chan T)
 
 	go func() {
@@ -63,7 +69,6 @@ func take[T any](done <-chan os.Signal, stream <-chan T, n int) <-chan T {
 			case taken <- <-stream:
 			}
 		}
-
 	}()
 
 	return taken
