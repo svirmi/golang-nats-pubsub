@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync"
 	"syscall"
 )
@@ -18,50 +20,130 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
-	stream := make(chan Data, 1)  // Channel to communicate between goroutines
-	closer := make(chan struct{}) // Channel to signal to stop generation and exit goroutine
-
-	go func() {
-		<-interrupt
-		close(closer)
+	defer func() {
+		close(interrupt)
 	}()
 
-	var wg sync.WaitGroup // WaitGroup to synchronize goroutines
-
-	// Start concurrent generation of data
-	for i := 0; i < 50000; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			generateData(id, stream, closer)
-		}(i)
+	randNumFetcher := func() int {
+		return rand.Intn(50000000)
 	}
 
-	// Print data received from the stream
-	go func() {
-		for data := range stream {
-			fmt.Printf("Received: %+v\n", data)
-		}
-	}()
+	randStream := repeatFunc(interrupt, randNumFetcher)
 
-	wg.Wait()     // Wait for all goroutines to finish
-	close(stream) // Close the stream channel
+	CPUCount := runtime.NumCPU() * 1 // coefficient to play with, get faster calculation when set to 2 or even 4
 
-	fmt.Println("Program finished")
+	// slice of resulting channels limited by logical CPU number available
+	primeFinderChannels := make([]<-chan int, CPUCount)
+
+	// fanning out
+	for core := 0; core < CPUCount; core++ {
+		primeFinderChannels[core] = primeFinder(interrupt, randStream)
+	}
+
+	// fanning in
+	fannedInStream := fanIn(interrupt, primeFinderChannels...)
+
+	for rando := range take(interrupt, fannedInStream, 10) {
+		fmt.Println(rando)
+	}
+
+	fmt.Println("\nProgram finished")
 }
 
-func generateData(id int, stream chan<- Data, closer chan struct{}) {
-loop:
-	for i := 0; i < 3; i++ {
-		data := Data{
-			ID:    id,
-			Value: fmt.Sprintf("Data %d-%d", id, i),
-		}
+func repeatFunc[T any, K any](done <-chan K, fn func() T) <-chan T {
+	stream := make(chan T)
 
-		select {
-		case stream <- data: // Send data through the stream channel
-		case <-closer: // Exit loop and stop sending/generation
-			break loop
+	go func() {
+		defer close(stream)
+
+		for {
+			select {
+			case <-done:
+				return
+			case stream <- fn():
+			}
+		}
+	}()
+
+	return stream
+}
+
+func fanIn[T any](done <-chan os.Signal, channels ...<-chan T) <-chan T {
+	var wg sync.WaitGroup
+	fannedInStream := make(chan T)
+
+	transfer := func(c <-chan T) {
+		defer wg.Done()
+		for i := range c {
+			select {
+			case <-done:
+				return
+			case fannedInStream <- i:
+			}
 		}
 	}
+	for _, c := range channels {
+		wg.Add(1)
+		go transfer(c)
+	}
+
+	go func() {
+		wg.Wait()
+		close(fannedInStream)
+	}()
+
+	return fannedInStream
+}
+
+func take[T any](done <-chan os.Signal, stream <-chan T, n int) <-chan T {
+
+	// Send operation to unbuffered channel blocks the sending goroutine,
+	// 'stream' (see repeatFunc, it stops) in this case blocked until data is read by 'taken' channel
+
+	taken := make(chan T)
+
+	go func() {
+		defer close(taken)
+		for i := 0; i < n; i++ {
+			select {
+			case <-done:
+				return
+			case taken <- <-stream:
+			}
+		}
+	}()
+
+	return taken
+}
+
+func primeFinder(done <-chan os.Signal, randStream <-chan int) <-chan int {
+	// NB! very costly slow function
+	isPrime := func(randomInt int) bool {
+		for i := randomInt - 1; i > 1; i-- {
+			if randomInt%i == 0 {
+				return false
+			}
+		}
+		return true
+	}
+
+	primes := make(chan int)
+
+	go func() {
+
+		defer close(primes)
+
+		for {
+			select {
+			case <-done:
+				return
+			case randomInt := <-randStream:
+				if isPrime(randomInt) {
+					primes <- randomInt
+				}
+			}
+		}
+	}()
+
+	return primes
 }
