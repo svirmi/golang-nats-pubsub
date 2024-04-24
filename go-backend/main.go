@@ -57,18 +57,18 @@ func worker(id int, dataStream <-chan SensorData, wg *sync.WaitGroup, done chan<
 	defer wg.Done()
 
 	for data := range dataStream {
-		// Simulate data processing
-		processData(id, data)
+		// Simulate data processing/publishing
+		publishData(id, data)
 	}
 
 	fmt.Printf("Worker %d finished\n", id)
 	done <- struct{}{}
 }
 
-// finding prime numbers
-func processData(workerID int, data SensorData) {
+func publishData(workerID int, data SensorData) {
 
 	// NB! very costly slow function
+	// finding prime numbers
 	isPrime := func(randomInt int) bool {
 		for i := randomInt - 1; i > 1; i-- {
 			if randomInt%i == 0 {

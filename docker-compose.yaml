@@ -1,9 +1,31 @@
 version: '3'
 services:
   data_stream:
-    build:s
+    build:
       context: ./go-backend
     environment:
       - APP_ENV=dev
     volumes:
       - ./go-backend:/app 
+
+  nats:
+    image: nats:alpine
+    container_name: nats
+    restart: always
+    command: -c /etc/nats/nats.conf
+    ports:
+      - "4222:4222" # client port
+      - "6222:6222" # cluster port
+      - "8222:8222" # monitoring port
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf
+      - ./nats/storage/jetstream:/data
+    # networks:
+      # - monitor-net   
+
+
+
+
+
+    # https://nats.io/blog/docker-compose-plus-nats/
+    # https://github.com/veggiemonk/compose-nats/blob/main/docker-compose.yml
