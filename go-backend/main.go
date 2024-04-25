@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/nats-io/nats.go"
 )
@@ -94,10 +93,11 @@ func publishData(workerID int, data SensorData) {
 		return true
 	}
 
-	now := time.Now()
+	// now := time.Now()
 
 	if isPrime(data.Value) {
-		duration := time.Since(now)
+		// duration := time.Since(now)
+		_ = workerID
 
 		msgBody, err := json.Marshal(data)
 		if err != nil {
@@ -109,6 +109,6 @@ func publishData(workerID int, data SensorData) {
 		}
 		nc.Flush()
 
-		fmt.Printf("Worker %d processed data from Sensor %d: Prime number is %d, took %d milliseconds to find\n", workerID, data.SensorID, data.Value, duration.Milliseconds())
+		// fmt.Printf("Worker %d processed data from Sensor %d: Prime number is %d, took %d milliseconds to find\n", workerID, data.SensorID, data.Value, duration.Milliseconds())
 	}
 }

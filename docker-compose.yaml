@@ -23,6 +23,10 @@ services:
     # networks:
       # - monitor-net   
 
+  node_server:
+    build:
+      context: ./node-server        
+
 
 
     # https://nats.io/blog/docker-compose-plus-nats/
