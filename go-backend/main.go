@@ -30,7 +30,7 @@ func main() {
 	dataStream := make(chan SensorData) // Channel for data streams
 	done := make(chan struct{})         // Channel to signal when processing is done
 
-	nc, err = nats.Connect(nats.DefaultURL)
+	nc, err = nats.Connect("nats://nats:4222")
 
 	if err != nil {
 		log.Fatal(err)
