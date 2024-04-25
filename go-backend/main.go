@@ -1,11 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/nats-io/nats.go"
 )
 
 type SensorData struct {
@@ -13,12 +17,24 @@ type SensorData struct {
 	Value    int
 }
 
+var (
+	nc   *nats.Conn
+	subj = "sensorData"
+	err  error
+)
+
 func main() {
 	numSensors := 1000
-	numWorkers := runtime.NumCPU() * 2
+	numWorkers := runtime.NumCPU() * 4
 
 	dataStream := make(chan SensorData) // Channel for data streams
 	done := make(chan struct{})         // Channel to signal when processing is done
+
+	nc, err = nats.Connect(nats.DefaultURL)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Create worker pool
 	var wg sync.WaitGroup
@@ -82,6 +98,16 @@ func publishData(workerID int, data SensorData) {
 
 	if isPrime(data.Value) {
 		duration := time.Since(now)
+
+		msgBody, err := json.Marshal(data)
+		if err != nil {
+			fmt.Println("Error marshalling to bytes : ", err)
+		}
+
+		if err := nc.Publish(subj, msgBody); err != nil {
+			log.Fatal(err)
+		}
+		nc.Flush()
 
 		fmt.Printf("Worker %d processed data from Sensor %d: Prime number is %d, took %d milliseconds to find\n", workerID, data.SensorID, data.Value, duration.Milliseconds())
 	}
