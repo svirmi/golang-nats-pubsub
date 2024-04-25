@@ -1,131 +1,90 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
-	"os"
-	"os/signal"
 	"runtime"
 	"sync"
-	"syscall"
+	"time"
+
+	"github.com/nats-io/nats.go"
 )
 
-type Data struct {
-	ID    int
-	Value string
+type SensorData struct {
+	SensorID int
+	Value    int
 }
+
+var (
+	nc   *nats.Conn
+	subj = "sensorData"
+	err  error
+)
 
 func main() {
+	numSensors := 1000
+	numWorkers := runtime.NumCPU() * 4
 
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	dataStream := make(chan SensorData) // Channel for data streams
+	done := make(chan struct{})         // Channel to signal when processing is done
 
-	defer func() {
-		fmt.Println("program finished")
-	}()
+	nc, err = nats.Connect("nats://nats:4222")
 
-	randNumFetcher := func() int {
-		return rand.Intn(50000000)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	randStream := repeatFunc(interrupt, randNumFetcher)
-
-	CPUCount := runtime.NumCPU() * 2 // coefficient to play with, get faster calculation when set to 2 or even 4
-
-	// slice of resulting channels limited by logical CPU number available
-	primeFinderChannels := make([]<-chan int, CPUCount)
-
-	// fanning out
-	for core := 0; core < CPUCount; core++ {
-		primeFinderChannels[core] = primeFinder(interrupt, randStream)
-	}
-
-	// fanning in
-	fannedInStream := fanIn(interrupt, primeFinderChannels...)
-
-	for randPrime := range take(interrupt, fannedInStream) {
-		fmt.Println(randPrime)
-	}
-
-	fmt.Println("\nready to finish")
-}
-
-func repeatFunc[T any, K any](done <-chan K, fn func() T) <-chan T {
-	stream := make(chan T)
-
-	go func() {
-		defer func() {
-			fmt.Println("closing repeatFunc")
-			close(stream)
-		}()
-
-		for {
-			select {
-			case <-done:
-				return
-			case stream <- fn():
-			}
-		}
-	}()
-
-	return stream
-}
-
-func fanIn[T any](done <-chan os.Signal, channels ...<-chan T) <-chan T {
+	// Create worker pool
 	var wg sync.WaitGroup
-	fannedInStream := make(chan T)
-
-	transfer := func(c <-chan T) {
-		defer func() {
-			wg.Done()
-		}()
-		for i := range c {
-			select {
-			case <-done:
-				return
-			case fannedInStream <- i:
-			}
-		}
-	}
-	for _, c := range channels {
+	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go transfer(c)
+		go worker(i, dataStream, &wg, done)
 	}
 
+	// Generate data streams
+	for i := 0; i < numSensors; i++ {
+		go func(sensorID int) {
+			for {
+				data := SensorData{
+					SensorID: sensorID,
+					Value:    rand.Intn(5000000), // Random value for demonstration
+				}
+				dataStream <- data
+				// time.Sleep(500 * time.Millisecond) // Data sent every half a second
+			}
+		}(i)
+	}
+
+	// Wait for all data to be processed
 	go func() {
 		wg.Wait()
-		close(fannedInStream)
+		close(dataStream)
+		close(done)
 	}()
 
-	return fannedInStream
+	// Wait for the processing to complete
+	<-done
+	fmt.Println("All data processed. Exiting.")
 }
 
-func take[T any](done <-chan os.Signal, stream <-chan T) <-chan T {
+func worker(id int, dataStream <-chan SensorData, wg *sync.WaitGroup, done chan<- struct{}) {
+	defer wg.Done()
 
-	// Send operation to unbuffered channel blocks the sending goroutine,
-	// 'stream' (see repeatFunc, it stops) in this case blocked until data is read by 'taken' channel
+	for data := range dataStream {
+		// Simulate data processing/publishing
+		publishData(id, data)
+	}
 
-	taken := make(chan T)
-
-	go func() {
-		defer close(taken)
-		for {
-			select {
-			case <-done:
-				return
-			case v, ok := <-stream:
-				if ok {
-					taken <- v
-				}
-			}
-		}
-	}()
-
-	return taken
+	fmt.Printf("Worker %d finished\n", id)
+	done <- struct{}{}
 }
 
-func primeFinder(done <-chan os.Signal, randStream <-chan int) <-chan int {
+func publishData(workerID int, data SensorData) {
+
 	// NB! very costly slow function
+	// finding prime numbers
 	isPrime := func(randomInt int) bool {
 		for i := randomInt - 1; i > 1; i-- {
 			if randomInt%i == 0 {
@@ -135,21 +94,21 @@ func primeFinder(done <-chan os.Signal, randStream <-chan int) <-chan int {
 		return true
 	}
 
-	primes := make(chan int)
+	now := time.Now()
 
-	go func() {
-		defer close(primes)
-		for {
-			select {
-			case <-done:
-				return
-			case randomInt := <-randStream:
-				if isPrime(randomInt) {
-					primes <- randomInt
-				}
-			}
+	if isPrime(data.Value) {
+		duration := time.Since(now)
+
+		msgBody, err := json.Marshal(data)
+		if err != nil {
+			fmt.Println("Error marshalling to bytes : ", err)
 		}
-	}()
 
-	return primes
+		if err := nc.Publish(subj, msgBody); err != nil {
+			log.Fatal(err)
+		}
+		nc.Flush()
+
+		fmt.Printf("Worker %d processed data from Sensor %d: Prime number is %d, took %d milliseconds to find\n", workerID, data.SensorID, data.Value, duration.Milliseconds())
+	}
 }
