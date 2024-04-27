@@ -1,24 +1,24 @@
 import { connect, StringCodec } from "nats";
 
-// to create a connection to a nats-server:
-const nc = await connect({ servers: "localhost:4222" });
-
+const main = async() => {
 // create a codec
 const sc = StringCodec();
+
+// to create a connection to a nats-server:
+const nc = await connect({ servers: "nats://nats:4222", debug: false });
+
 // create a simple subscriber and iterate over messages
 // matching the subscription
-const sub = nc.subscribe("hello");
-(async () => {
-  for await (const m of sub) {
-    console.log(`[${sub.getProcessed()}]: ${sc.decode(m.data)}`);
-  }
-  console.log("subscription closed");
-})();
+const sub = nc.subscribe("sensorData");
 
-// we want to insure that messages that are in flight
-// get processed, so we are going to drain the
-// connection. Drain is the same as close, but makes
-// sure that all messages in flight get seen
-// by the iterator. After calling drain on the connection
-// the connection closes.
+for await (const m of sub) {
+  console.log(`[${sub.getProcessed()}]: ${sc.decode(m.data)}`);
+}
+
+console.log("subscription closed");
+
 await nc.drain();
+console.log("connection closed");
+}
+
+main();

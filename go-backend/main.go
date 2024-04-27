@@ -1,12 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/nats-io/nats.go"
 )
@@ -14,12 +14,16 @@ import (
 type SensorData struct {
 	SensorID int
 	Value    int
+	Duration int
+	WorkerId int
 }
 
+const subj = "sensorData"
+
 var (
-	nc   *nats.Conn
-	subj = "sensorData"
-	err  error
+	nc  *nats.Conn
+	ec  *nats.EncodedConn
+	err error
 )
 
 func main() {
@@ -34,6 +38,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	defer nc.Close()
+
+	ec, err = nats.NewEncodedConn(nc, nats.JSON_ENCODER)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer ec.Close()
 
 	// Create worker pool
 	var wg sync.WaitGroup
@@ -93,22 +105,14 @@ func publishData(workerID int, data SensorData) {
 		return true
 	}
 
-	// now := time.Now()
+	now := time.Now()
 
 	if isPrime(data.Value) {
-		// duration := time.Since(now)
-		_ = workerID
+		duration := time.Since(now) / time.Millisecond
 
-		msgBody, err := json.Marshal(data)
-		if err != nil {
-			fmt.Println("Error marshalling to bytes : ", err)
-		}
-
-		if err := nc.Publish(subj, msgBody); err != nil {
+		// Publish the message
+		if err := ec.Publish(subj, &SensorData{SensorID: data.SensorID, Value: data.Value, Duration: int(duration), WorkerId: workerID}); err != nil {
 			log.Fatal(err)
 		}
-		nc.Flush()
-
-		// fmt.Printf("Worker %d processed data from Sensor %d: Prime number is %d, took %d milliseconds to find\n", workerID, data.SensorID, data.Value, duration.Milliseconds())
 	}
 }
