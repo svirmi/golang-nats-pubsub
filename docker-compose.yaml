@@ -7,6 +7,10 @@ services:
       - APP_ENV=dev
     volumes:
       - ./go-backend:/app 
+    depends_on:
+      nats:
+        condition: service_started
+        restart: true     
 
   nats:
     image: nats:alpine
@@ -22,6 +26,16 @@ services:
       - ./nats/storage/jetstream:/data
     # networks:
       # - monitor-net   
+
+  node_server:
+    build:
+      context: ./node-server  
+    ports: 
+      - "8999:8999"
+    depends_on:
+      data_stream:
+        condition: service_started
+        restart: true          
 
 
 
