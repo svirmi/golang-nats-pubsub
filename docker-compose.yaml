@@ -27,16 +27,15 @@ services:
     # networks:
       # - monitor-net   
 
-  node_server:
+  node_ws_server:
     build:
-      context: ./node-server  
+      context: ./node-ws-server  
     ports: 
       - "8999:8999"
     depends_on:
       data_stream:
         condition: service_started
         restart: true          
-
 
 
     # https://nats.io/blog/docker-compose-plus-nats/
