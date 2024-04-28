@@ -30,6 +30,8 @@ services:
   node_server:
     build:
       context: ./node-server  
+    ports: 
+      - "8999:8999"
     depends_on:
       data_stream:
         condition: service_started

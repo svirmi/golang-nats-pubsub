@@ -16,7 +16,7 @@ RUN npm install && npm cache clean --force
  
 # Get all the code needed to run the app
 COPY . .
- 
+
 # Expose the port the app runs in
 EXPOSE 3000
  
