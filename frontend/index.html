@@ -3,17 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-
+    <title>NATS stream</title>
 
     <script>
         "use strict";
+
+        let trackedStreams = [];
         
-        let socket = new WebSocket("ws://0.0.0.0:8999");
-        
+        let socket = new WebSocket("ws://0.0.0.0:8999");        
         
         socket.onmessage = function(event) {
-          console.log(`[message] Data received from server: ${event.data}`);
+
+          try {
+            let msgs = JSON.parse(event.data);
+            if (Array.isArray(msgs)) {
+              for (let msg of msgs) {
+                handleMessage(msg);
+              }
+            } else {
+              handleMessage(msgs)
+            }
+
+            console.log(`[message] Data received from server: ${event.data}`);
+
+          } catch (e) {
+            console.log('Unknown message: ' + event.data, e);
+          }
+          
         };
         
         socket.onclose = function(event) {
@@ -29,11 +45,25 @@
         socket.onerror = function(error) {
           alert(`[error]`);
         };
-        </script>
-            
+
+        function handleMessage(msg) {
+          const stream = msg.SensorId;
+          if (trackedStreams.indexOf(stream) === -1) {
+            document.getElementById('streams').innerHTML += '<br/>' + stream + ': <span id="stream_' + stream + '"></span>';
+            trackedStreams.push(stream);
+            document.getElementById('totalstreams').innerText = trackedStreams.length;
+          }
+
+          document.getElementById('stream_' + stream).innerText = msg.Value;
+  }
+    </script>           
 
 </head>
 <body>
+
+  <span id="totalstreams"></span> streams tracked<br/>
+   Value recieved:<br/>
+  <div id="streams"></div>
 
 </body>
 </html>
