@@ -27,6 +27,9 @@ services:
     # networks:
       # - monitor-net   
 
+    # https://nats.io/blog/docker-compose-plus-nats/
+    # https://github.com/veggiemonk/compose-nats/blob/main/docker-compose.yml
+
   node_ws_server:
     build:
       context: ./node-ws-server  
@@ -37,6 +40,16 @@ services:
         condition: service_started
         restart: true          
 
-
-    # https://nats.io/blog/docker-compose-plus-nats/
-    # https://github.com/veggiemonk/compose-nats/blob/main/docker-compose.yml
+  frontend:
+    build:
+      context: ./frontend
+    ports: 
+      - "80:8080"      
+    environment:
+      - APP_ENV=dev
+    volumes:
+      - ./go-backend:/app 
+    depends_on:
+      node_ws_server:
+        condition: service_started
+        restart: true      
