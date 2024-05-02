@@ -8,13 +8,14 @@ import (
 )
 
 type NatsClient struct {
+	connection        *nats.Conn
 	encodedConnection *nats.EncodedConn
 	BidAskTickChan    chan *bt.TickerData
 }
 
-func NewClient() (*NatsClient, error) {
+func NewNatsClient() (*NatsClient, error) {
 
-	nc, err := nats.Connect("nats://nats:4222")
+	nc, err := nats.Connect("nats://localhost:4222")
 
 	if err != nil {
 		log.Fatal(err)
@@ -26,14 +27,15 @@ func NewClient() (*NatsClient, error) {
 		log.Fatal(err)
 	}
 
-	defer func() {
-		nc.Close()
-		nc.Close()
-		log.Println("NATS connection closed")
-	}()
-
 	return &NatsClient{
+		connection:        nc,
 		encodedConnection: ec,
 		BidAskTickChan:    make(chan *bt.TickerData, 1),
 	}, nil
+}
+
+func (nats *NatsClient) Close() {
+	nats.encodedConnection.Close()
+	nats.connection.Close()
+	log.Println("NATS connection closed")
 }
